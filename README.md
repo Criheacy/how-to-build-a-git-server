@@ -32,6 +32,8 @@
 
 git 自带 http、ssh，以及一种 git 自创通讯协议，其中 ssh 是我最开始尝试的一种。如果 url 的格式是 `git@[hostname]:[path].git` 这种类型，就说明 git 使用的是 ssh 协议。其实 url 中 `@` 符号前的 `git` 就是 username，而 `.git` 就是 path 的一部分；这样看来这其实跟 `ssh [username]@[host]:[path]` 的格式一模一样。
 
+> 本文中所有 [中括号] 在实际操作中都需要替换成实际的内容，例如 host 指代的是服务器的 IP 地址或域名，例如 140.82.114.4 或 github.com ；而 path 指一段服务器上的路径，例如 Criheacy/MyBlog 。
+
 ![git-ssh-example](README.assets/git-ssh-example.png)
 
 根据上面的分析，我们要首先创建一个叫 git 的用户，并且允许 ssh 连接到它：
@@ -119,6 +121,54 @@ git config --add --local core.sshCommand 'ssh -i [ssh_key_path]'
 
 ```shell
 # [on developer's PC]
-git clone [repository_name]
+git clone git@[hostname]:[repository_name].git
 ```
 
+到此为止，git 服务端已经能够实现最基本的用户授权以及常规的 git push 和 git pull 等操作了。不过还有个小问题，因为 git 是使用 ssh 进行访问的，上面也能看出来 git 的连接 url 跟 ssh 连接时的 url 很像，所以假如你尝试用 ssh 连接服务器：
+
+```shell
+ssh git@[host_name]
+```
+
+你会发现这也是可行的。当然我肯定不希望用户能通过 git 以外的方式直接操作服务器上的文件或者做一些其它的危险操作，而 git 也给出了自带的解决方案，即 git-shell 。它能够限制授权的用户在 ssh 连接后只进行 git 相关的操作（也可以自定义放行一些其它的操作）。
+
+git-shell 会随着 git 自动安装，但不一定会出现在系统默认 shell 列表中。所以在使用它之前需要先检查：
+
+```shell
+# check system default shell list
+cat /etc/shells
+# if git-shell is not in the list:
+# check if git shell has already installed
+which git-shell
+# if installed, add its path to the list
+which git-shell >> /etc/shells
+```
+
+添加完成后，使用 `chsh` 命令来切换用户的 shell：
+
+```shell
+sudo chsh git -s [path_of_git-shell]
+```
+
+这之后如果再尝试通过 ssh 连接到 git 用户，服务器会提示授权成功，但是拒绝这个连接：
+
+```text
+fatal: Interactive git shell is not enabled.
+hint: ~/git-shell-commands should exist and have read and execute access.
+```
+
+为了全面防止用户通过 ssh 端口转发来间接访问 git 服务器，可以编辑刚才的 `.ssh/authorized_keys` 文件来禁止通过端口转发的方式访问。在要进行限制的授权公钥前面加上：
+
+```text
+no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty
+```
+
+现在 `cat authorized_keys` 之后应该能看到类似下面的内容：
+
+```text
+no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAAxxxxxxxx...xxxxxxxx [email_address]
+```
+
+现在用户已经无法通过 ssh 的方式连接到 git 用户了，只能使用规定的 git 命令（例如 git push 、 git pull 等）。
+
+到此为止，这基本就是 git 自带的 ssh 连接方式能够实现的全部功能了。然而这显然还是不够的，我需要 git server 能与现有的网站认证方式进行交互，由 project participant 列表来决定用户对仓库的访问权，而不仅仅是通过 ssh 认证的公钥来「一刀切」地决定访问权限。我判断大致的实现方式是新搭一个后端来接受 git 的网络请求，然后通过 RPC 的方式来调用现有的授权服务接口，不过如何处理 git 网络请求仍是一个难点。
