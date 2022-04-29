@@ -17,3 +17,108 @@
 
 现在已经完成了一些基本的网站服务，例如用户认证系统（目前是基于 JWT 的）、项目的 CRUD ，以及项目成员的 CRUD 系统，并且已经通过了一些基本测试。我希望 git server 是能够跟这套系统相配合的，例如使用现有的用户系统进行身份认证，并且能够根据项目成员的权限来放行或组织 git push 和 pull 操作。因为现在有已经具备这套功能的系统（例如 GitHub），所以肯定是可行的；但 GitHub 服务不开源，所以需要进行一些自己的尝试。
 
+### 准备
+
+这些是我在开始尝试之前具有的技能或资源：
+
+- git 的基本命令（add, commit, push, pull, merge, rebase, checkout, switch, log），支持大多数日常工作场景
+- 全栈技能（前端 react / vue + 后端 spring boot / express）
+- 不太多的 linux 使用以及运维知识
+- 一台腾讯云上有公网 IP 的服务器
+
+### 初步尝试
+
+#### git 自带的 ssh 通讯协议
+
+git 自带 http、ssh，以及一种 git 自创通讯协议，其中 ssh 是我最开始尝试的一种。如果 url 的格式是 `git@[hostname]:[path].git` 这种类型，就说明 git 使用的是 ssh 协议。其实 url 中 `@` 符号前的 `git` 就是 username，而 `.git` 就是 path 的一部分；这样看来这其实跟 `ssh [username]@[host]:[path]` 的格式一模一样。
+
+![git-ssh-example](README.assets/git-ssh-example.png)
+
+根据上面的分析，我们要首先创建一个叫 git 的用户，并且允许 ssh 连接到它：
+
+```shell
+# [on server]
+
+sudo useradd git
+# become the "git" user
+su git
+# navigate to /home/git
+cd
+mkdir .ssh
+chmod 750 .ssh  # 700 if no need for user group
+cd .ssh
+# create store for pub keys
+touch authorized_keys
+chmod 640 authorized_keys # 600 if no need for user group
+```
+
+为了验证用户的身份，ssh 需要使用公钥/私钥认证。之前生成的密钥对，在 Windows 系统中储存在 `C:\Users\[username]\.ssh` ，在 Linux 系统中则储存在 `~/.ssh` 。如果之前生成过密钥，那可以跳过生成密钥的过程，只需要把密钥添加到服务器上就可以；如果没有，则需要进行以下步骤：
+
+- 使用 ssh-keygen 命令生成密钥对：
+  ```shell
+  ssh-keygen -t ed25519 -C "[email_address]"
+  ```
+  这里也可以生成 rsa 密钥：
+
+  ```shell
+  ssh-keygen -t rsa -b 4096 -C "[email_address]"
+  ```
+
+  我查到的一些资料说 ed25519 性能和安全性会优于 rsa 算法，但是通用性不如 rsa ，一些低版本的 ssh 只支持 rsa 。
+
+  - 这里 -C 可以指定密钥说明信息，不写的话会默认填上路径+用户名的信息（GitHub 上要求填写邮箱地址，没尝试过不填会怎么样）
+
+- 根据提示完成密钥生成过程：
+
+  - 指定密钥储存位置：默认路径即可；如果不是默认路径则需要连接时手动指定
+  - 指定签名（passphrase）：填不填都行，如果填写则需要在连接时提供
+
+生成完成之后，将生成的 `.pub` 文件内容复制到服务器上刚才创建的 `authorized_keys` 文件中。可以物理复制（拿张纸条抄过去），如果是本机 ssh 连的服务器也可以 `Ctrl+C` 然后在服务器上 `echo "[Ctrl+V]" >> authorized_keys` 。总之执行 `cat authorized_keys` 之后应该能看到类似下面的内容：
+
+```text
+ssh-ed25519 AAAAxxxxxxxx...xxxxxxxx [email_address]
+```
+
+若 rsa 生成的则前缀是 ssh-rsa 。
+
+现在客户端已经可以通过 ssh 连接到服务器上的 git 用户了。接下来在服务器上创建 git 的目标仓库：
+
+```shell
+# [on server, as user git]
+
+cd
+mkdir [repository_name].git
+cd [repository_name].git
+# create bare repository
+git init --bare
+```
+
+`repository_name` 可以任意指定，也可以像 GitHub 一样是一段路径（`owner_name/repository_name`），总之能访问到对应的文件夹即可。这个文件夹地址如果不以 `/` 开头，则指代的是 git 的用户根目录（`/home/git/[repository_name]`），与 server 类似。
+
+如果一切就绪，这时候你就能像 push 到 GitHub 一样 push 到这个服务器上的仓库了：
+
+```shell
+# [on developer's PC]
+mkdir [repository_name]
+# do some changes
+git add .
+git commit -m "Initial commit"
+git remote add origin git@[hostname]:[repository_name].git
+git push origin main
+```
+
+如果在生成密钥时没有储存在默认路径，而是存储在自定义的位置，就需要为 git 额外添加一条 ssh 配置：
+
+```shell
+git config --add --local core.sshCommand 'ssh -i [ssh_key_path]'
+```
+
+而如果是同一个仓库下不同远端仓库使用的 ssh 密钥的储存位置不同（其实建议同一个本地密钥上传到多个远端最方便，当然安全性肯定是分开更高），可以参考[这个回答](https://stackoverflow.com/a/7927828)。
+
+同样的，在别的授权过的电脑上也可以把仓库下载下来：
+
+```shell
+# [on developer's PC]
+git clone [repository_name]
+```
+
