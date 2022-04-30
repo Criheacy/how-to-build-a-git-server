@@ -97,6 +97,8 @@ git init --bare
 
 `repository_name` 可以任意指定，也可以像 GitHub 一样是一段路径（`owner_name/repository_name`），总之能访问到对应的文件夹即可。这个文件夹地址如果不以 `/` 开头，则指代的是 git 的用户根目录（`/home/git/[repository_name]`），与 server 类似。
 
+> 这一步应用在系统中时可以由程序自动完成，即创建项目的 API 收到请求后 RPC 调用管理 git 相关服务的服务端，由这个服务端执行一系列上述脚本命令来创建项目文件夹并创建 git 裸仓库。
+
 如果一切就绪，这时候你就能像 push 到 GitHub 一样 push 到这个服务器上的仓库了：
 
 ```shell
@@ -172,3 +174,10 @@ no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA
 现在用户已经无法通过 ssh 的方式连接到 git 用户了，只能使用规定的 git 命令（例如 git push 、 git pull 等）。
 
 到此为止，这基本就是 git 自带的 ssh 连接方式能够实现的全部功能了。然而这显然还是不够的，我需要 git server 能与现有的网站认证方式进行交互，由 project participant 列表来决定用户对仓库的访问权，而不仅仅是通过 ssh 认证的公钥来「一刀切」地决定访问权限。我判断大致的实现方式是新搭一个后端来接受 git 的网络请求，然后通过 RPC 的方式来调用现有的授权服务接口，不过如何处理 git 网络请求仍是一个难点。
+
+#### http 通讯协议
+
+探索到这里，我认为想要接入自己的授权系统，就肯定需要自己手写一部分服务端代码，不是简简单单配置一下就能完事的。尽管我知道 GitHub 的 git ssh 通讯协议也能接入它的授权系统（证明 ssh 接入也是有可行方案的），但是我们平常还是跟 http 的授权打交道更多一点，而且我以前也只写过 http 后端。所以我准备从 git 使用 http 协议时发送的数据包入手来看看如何接入现有的授权系统。
+
+[这篇文档](https://www.git-scm.com/docs/http-protocol)
+
