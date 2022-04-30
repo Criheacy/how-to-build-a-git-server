@@ -162,7 +162,16 @@ no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA
 
 #### http 通讯协议
 
-探索到这里，我认为想要接入自己的授权系统，就肯定需要自己手写一部分服务端代码，不是简简单单配置一下就能完事的。尽管我知道 GitHub 的 git ssh 通讯协议也能接入它的授权系统（证明 ssh 接入也是有可行方案的），但是我们平常还是跟 http 的授权打交道更多一点，而且我以前也只写过 http 后端。所以我准备从 git 使用 http 协议时发送的数据包入手来看看如何接入现有的授权系统。
+尽管我知道 GitHub 的 git ssh 通讯协议也能接入它的授权系统（至少证明 ssh 接入也是有可行方案的），但是我们平常还是跟 http 的授权打交道更多一点，而且我以前也只写过 http 后端。所以我准备从 git 使用 http 协议时发送的数据包入手来看看如何接入现有的授权系统。
 
-[这篇文档](https://www.git-scm.com/docs/http-protocol)
+最初我以为需要自己手写一个后端来处理 git 网络请求，例如处理 git push 或者 git pull 发来的 http 包并根据返回符合标准的响应，从而能被 git bash 理解，其实就是一个已有前端（客户端）和接口文档写服务端的过程。
 
+然而经过我一番查找，就连 [git 的官方文档](https://git-scm.com/docs/http-protocol#_smart_service_git_upload_pack)对 http 协议内部传输规范的介绍也很有限：前面写了一堆似是而非的举例，然后即将讲到重点的时候直接一句 `TODO: Document this further` 然后戛然而止。
+
+![document-this-further](README.assets/document-this-further.png)
+
+我查了一下这篇文档的[源代码](https://github.com/git/htmldocs/blob/de44de3d9e71db785a0bbd06a6ddad8d2c38dd67/technical/http-protocol.txt#L513)，发现最近修改的时间是 2021 年 9 月。git push 这些如此古老的功能竟然到现在还没有文档，真是令人感慨。我还搜到了一些自己实现的 git http backend（比如[这个](https://github.com/asim/git-http-backend)），甚至还有[一篇](https://mincong.io/2018/05/04/git-and-http/)满是逆向工程感觉的「探索」git http 内部协议的博客。看起来想要自己实现一个 git http backend 倒也不是不可能，只是肯定会花费很多时间。
+
+于是我又折回头去看原来的 git 文档。我一开始并非没有注意到 git 自带的 git-http-backend ，这是一个 CGI 脚本（Common Gateway Interface，大概意思是把 url 中的路径映射到服务器的文件系统中，我感觉有点像用作静态路径代理时的 Nginx），能够处理 git fetch 和 git push 的请求。我开始时略过它的原因时我认为它跟 ssh 协议类似，都是只能通过自带的授权认证来放行或阻挡请求（实际上它本体也确实如此）。
+
+但是在想自己写一个 git-http-backend 这个想法陷入困境的时候，我发现其实可以只写一个网关一样的后端，解析请求头通过数据库（或 RPC）来完成权限验证，通过验证的就将请求转发给自带的 git-http-backend ，未通过的就直接返回错误码。
