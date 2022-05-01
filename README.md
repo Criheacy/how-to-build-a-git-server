@@ -15,9 +15,9 @@
 
 #### git 自带的 ssh 通讯协议
 
-git 自带 http、ssh，以及一种 git 自创通讯协议，其中 ssh 是我最开始尝试的一种。如果 url 的格式是 `git@[hostname]:[path].git` 这种类型，就说明 git 使用的是 ssh 协议。其实 url 中 `@` 符号前的 `git` 就是 username，而 `.git` 就是 path 的一部分；这样看来这其实跟 `ssh [username]@[host]:[path]` 的格式一模一样。
+git 自带 http、ssh，以及一种 git 自创通讯协议。这其中 ssh 是我最开始尝试的一种。如果 url 的格式是 `git@[hostname]:[path].git` 这种类型，就说明 git 使用的是 ssh 协议。其实 url 中 `@` 符号前的 `git` 就是 username，而 `.git` 就是 path 的一部分；这样看来这其实跟 `ssh [username]@[host]:[path]` 的格式一模一样。
 
-> 本文中所有 [中括号] 在实际操作中都需要替换成实际的内容，例如 host 指代的是服务器的 IP 地址或域名，例如 140.82.114.4 或 github.com ；而 path 指一段服务器上的路径，例如 Criheacy/MyBlog 。
+> 本文中所有正文中的 [中括号] 在实际操作中都需要替换成实际的内容，例如 host 指代的是服务器的 IP 地址或域名，例如 140.82.114.4 或 github.com ；而 path 指一段服务器上的路径，例如 Criheacy/MyBlog 。
 
 ![git-ssh-example](README.assets/git-ssh-example.png)
 
@@ -60,13 +60,11 @@ chmod 640 authorized_keys # 600 if no need for user group
   - 指定密钥储存位置：默认路径即可；如果不是默认路径则需要连接时手动指定
   - 指定签名（passphrase）：填不填都行，如果填写则需要在连接时提供
 
-生成完成之后，将生成的 `.pub` 文件内容复制到服务器上刚才创建的 `authorized_keys` 文件中。可以物理复制（拿张纸条抄过去），如果是本机 ssh 连的服务器也可以 `Ctrl+C` 然后在服务器上 `echo "[Ctrl+V]" >> authorized_keys` 。总之执行 `cat authorized_keys` 之后应该能看到类似下面的内容：
+生成完成之后，将生成的 `.pub` 文件内容复制到服务器上刚才创建的 `authorized_keys` 文件中。可以物理复制（拿张纸条抄过去），如果是本机 ssh 连的服务器也可以 `Ctrl+C` 然后在服务器上 `echo "[Ctrl+V]" >> authorized_keys` 。总之执行 `cat authorized_keys` 之后应该能看到类似下面的内容（若 rsa 生成的则前缀是 ssh-rsa）：
 
 ```text
 ssh-ed25519 AAAAxxxxxxxx...xxxxxxxx [email_address]
 ```
-
-若 rsa 生成的则前缀是 ssh-rsa 。
 
 现在客户端已经可以通过 ssh 连接到服务器上的 git 用户了。接下来在服务器上创建 git 的目标仓库：
 
@@ -80,11 +78,11 @@ cd [repository_name].git
 git init --bare
 ```
 
-`repository_name` 可以任意指定，也可以像 GitHub 一样是一段路径（`owner_name/repository_name`），总之能访问到对应的文件夹即可。这个文件夹地址如果不以 `/` 开头，则指代的是 git 的用户根目录（`/home/git/[repository_name]`），与 server 类似。
+`repository_name` 可以任意指定的目录名称，也可以像 GitHub 一样是一段路径（`owner_name/repository_name`），总之能访问到对应的文件夹即可。这个文件夹地址如果不以 `/` 开头，则指代的是 git 的用户根目录（`/home/git/[repository_name]`）。
 
 > 这一步应用在系统中时可以由程序自动完成，即创建项目的 API 收到请求后 RPC 调用管理 git 相关服务的服务端，由这个服务端执行一系列上述脚本命令来创建项目文件夹并创建 git 裸仓库。
 
-如果一切就绪，这时候你就能像 push 到 GitHub 一样 push 到这个服务器上的仓库了：
+如果一切就绪，这时候就能像 push 到 GitHub 一样 push 到这个服务器上的仓库了：
 
 ```shell
 # [on developer's PC]
@@ -144,7 +142,7 @@ fatal: Interactive git shell is not enabled.
 hint: ~/git-shell-commands should exist and have read and execute access.
 ```
 
-为了全面防止用户通过 ssh 端口转发来间接访问 git 服务器，可以编辑刚才的 `.ssh/authorized_keys` 文件来禁止通过端口转发的方式访问。在要进行限制的授权公钥前面加上：
+为了更全面地防止用户通过 ssh 端口转发来间接访问 git 服务器，可以编辑刚才的 `.ssh/authorized_keys` 文件来禁止通过端口转发的方式访问。在要进行限制的授权公钥前面加上：
 
 ```text
 no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty
@@ -158,20 +156,30 @@ no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA
 
 现在用户已经无法通过 ssh 的方式连接到 git 用户了，只能使用规定的 git 命令（例如 git push 、 git pull 等）。
 
-到此为止，这基本就是 git 自带的 ssh 连接方式能够实现的全部功能了。然而这显然还是不够的，我需要 git server 能与现有的网站认证方式进行交互，由 project participant 列表来决定用户对仓库的访问权，而不仅仅是通过 ssh 认证的公钥来「一刀切」地决定访问权限。我判断大致的实现方式是新搭一个后端来接受 git 的网络请求，然后通过 RPC 的方式来调用现有的授权服务接口，不过如何处理 git 网络请求仍是一个难点。
+到此为止，这基本就是 git 自带的 ssh 连接方式能够实现的全部功能了。然而这显然还是不够的，我需要 git server 能与现有的网站认证方式进行交互，由存在数据库里的 project participant 表来决定用户对仓库的访问权，而不仅仅是通过 ssh 认证的公钥来「一刀切」地决定访问权限。我判断大致的实现方式是新搭一个后端来接受 git 的网络请求，然后通过 RPC 的方式来调用现有的授权服务接口，不过如何处理 git 网络请求仍是一个难点。
 
 #### http 通讯协议
 
 尽管我知道 GitHub 的 git ssh 通讯协议也能接入它的授权系统（至少证明 ssh 接入也是有可行方案的），但是我们平常还是跟 http 的授权打交道更多一点，而且我以前也只写过 http 后端。所以我准备从 git 使用 http 协议时发送的数据包入手来看看如何接入现有的授权系统。
 
-最初我以为需要自己手写一个后端来处理 git 网络请求，例如处理 git push 或者 git pull 发来的 http 包并根据返回符合标准的响应，从而能被 git bash 理解，其实就是一个已有前端（客户端）和接口文档写服务端的过程。
+##### 手写 git server
 
-然而经过我一番查找，就连 [git 的官方文档](https://git-scm.com/docs/http-protocol#_smart_service_git_upload_pack)对 http 协议内部传输规范的介绍也很有限：前面写了一堆似是而非的举例，然后即将讲到重点的时候直接一句 `TODO: Document this further` 然后戛然而止。
+最初我以为需要自己手写一个后端来处理 git 网络请求，例如处理 git push 或者 git pull 发来的 http 包并根据返回符合标准的响应，从而能被 git bash 理解，其实就是一个已有客户端和接口文档写服务端的过程。
+
+然而经过我一番查找，就连 [git 的官方文档](https://git-scm.com/docs/http-protocol#_smart_service_git_upload_pack)对 http 协议内部传输规范的介绍也很有限：前面写了一堆似是而非的规则和举例，然后即将讲到重点的时候直接一句 `TODO: Document this further` 然后戛然而止。
 
 ![document-this-further](README.assets/document-this-further.png)
 
-我查了一下这篇文档的[源代码](https://github.com/git/htmldocs/blob/de44de3d9e71db785a0bbd06a6ddad8d2c38dd67/technical/http-protocol.txt#L513)，发现最近修改的时间是 2021 年 9 月。git push 这些如此古老的功能竟然到现在还没有文档，真是令人感慨。我还搜到了一些自己实现的 git http backend（比如[这个](https://github.com/asim/git-http-backend)），甚至还有[一篇](https://mincong.io/2018/05/04/git-and-http/)满是逆向工程感觉的「探索」git http 内部协议的博客。看起来想要自己实现一个 git http backend 倒也不是不可能，只是肯定会花费很多时间。
+我查了一下这篇文档的[源代码](https://github.com/git/htmldocs/blob/de44de3d9e71db785a0bbd06a6ddad8d2c38dd67/technical/http-protocol.txt#L513)，发现最近修改的时间是 2021 年 9 月。git push 这些如此古老的功能竟然到现在还没有文档，真是令人感慨。我还搜到了一些自己实现的 git server（比如[这个](https://github.com/asim/git-http-backend)），甚至还有[一篇](https://mincong.io/2018/05/04/git-and-http/)满是逆向工程感觉的「探索」git http 内部协议的博客。看起来想要自己实现一个 git server 倒也不是不可能，只是肯定会花费很多时间。
 
-于是我又折回头去看原来的 git 文档。我一开始并非没有注意到 git 自带的 git-http-backend ，这是一个 CGI 脚本（Common Gateway Interface，大概意思是把 url 中的路径映射到服务器的文件系统中，我感觉有点像用作静态路径代理时的 Nginx），能够处理 git fetch 和 git push 的请求。我开始时略过它的原因时我认为它跟 ssh 协议类似，都是只能通过自带的授权认证来放行或阻挡请求（实际上它本体也确实如此）。
+##### git-http-backend
 
-但是在想自己写一个 git-http-backend 这个想法陷入困境的时候，我发现其实可以只写一个网关一样的后端，解析请求头通过数据库（或 RPC）来完成权限验证，通过验证的就将请求转发给自带的 git-http-backend ，未通过的就直接返回错误码。
+于是我又折回头去看原来的 git 文档。我开始时并非没有注意到 git 自带的 git-http-backend ，这是一个 CGI 脚本（Common Gateway Interface，大概意思是把 url 中的路径映射到服务器的文件系统中，我感觉有点像用作静态路径代理时的 Nginx），它能够处理 git fetch 和 git push 的请求。开始时略过它的原因是我认为它跟 ssh 协议类似，都是只能通过自带的授权认证来放行或阻挡请求（实际上它本体也确实如此）。
+
+但是在想要自己写一个 git server 这个想法陷入困境的时候，我发现其实可以只写一个网关一样的后端，解析请求头通过数据库（或 RPC）来完成权限验证，通过验证的就将请求转发给自带的 git-http-backend ，未通过的就直接返回错误码。于是我又折回来看 git-http-backend 的文档。
+
+[git 的官方文档](https://git-scm.com/book/zh/v2/%E6%9C%8D%E5%8A%A1%E5%99%A8%E4%B8%8A%E7%9A%84-Git-Smart-HTTP)上讲述了如何利用 git-http-backend 搭建一个服务器。不过这是基于 apache 的，而我的后端水平只限于利用 spring boot 这种框架写写 controller 什么的，并不明白 tomcat 和 apache 这类东西都是做什么的，而文档上要用 apache 来通过写配置文件的方式调用 git-http-backend，基本上就是我未涉及过的领域了。于是在看了半天 apache 天书一样的配置文件文档之后，我还是决定尝试寻找一下对我来说简单一点的方法。
+
+因为我对 nodejs 下的 express 框架比较熟悉，所以我直接搜索了 `run git-http-backend nodejs` 这几个关键词，然后找到了一个 [npm 的包](https://www.npmjs.com/package/git-http-backend)；再往下翻翻又找到了一个[仓库](https://github.com/fuubi/node-git-http-backend)，简单扫了一眼 usage 发现调用过程确实比 apache 那套简单很多，而且接入 nodejs 之后就有了很大的操作空间。最重要的是，它还附带了 [git-http-backend 的源码](https://github.com/git/git/blob/master/http-backend.c)和[官方文档](https://git-scm.com/docs/git-http-backend)。众里寻他千百度，人家根本不在灯火阑珊处，这源代码直接就在 git 的仓库根目录下躺着，相当于放在灯底下照着都没找到。
+
+在简单翻了翻源代码之后，我发现这个 git-http-backend 其实只写了逻辑层（相当于业务层的实现），并没有写网络服务相关的 controller，可能这就是为什么要用 apache 把它 serve 起来的原因吧。随后我就开始仿照这些 npm 包上的示例开始尝试：
